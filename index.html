@@ -1,0 +1,1652 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>M6 Ranch: Ryan's Wild Acre</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+        
+        body {
+            font-family: 'Georgia', serif;
+            background: linear-gradient(135deg, #8B4513 0%, #D2691E 100%);
+            overflow: hidden;
+            touch-action: none;
+            position: fixed;
+            width: 100%;
+            height: 100%;
+        }
+        
+        #gameContainer {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 100vh;
+            position: relative;
+        }
+        
+        #gameCanvas {
+            background: #87CEEB;
+            border: 4px solid #654321;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.3);
+            max-width: 100%;
+            max-height: 100%;
+            touch-action: none;
+        }
+        
+        #ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            right: 10px;
+            color: white;
+            font-size: 20px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+            pointer-events: none;
+            z-index: 10;
+        }
+        
+        .score {
+            background: rgba(0,0,0,0.5);
+            padding: 10px 15px;
+            border-radius: 10px;
+            display: inline-block;
+        }
+        
+        #message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.85);
+            color: #FFD700;
+            padding: 30px 40px;
+            border-radius: 15px;
+            font-size: 24px;
+            text-align: center;
+            border: 3px solid #FFD700;
+            display: none;
+            z-index: 100;
+            max-width: 90%;
+        }
+        
+        button {
+            background: #D2691E;
+            color: white;
+            border: 3px solid #8B4513;
+            padding: 12px 24px;
+            font-size: 18px;
+            border-radius: 8px;
+            cursor: pointer;
+            margin: 10px 5px;
+            font-family: 'Georgia', serif;
+            font-weight: bold;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+            transition: all 0.2s;
+        }
+        
+        button:hover {
+            background: #CD853F;
+            transform: scale(1.05);
+        }
+        
+        button:active {
+            transform: scale(0.95);
+        }
+        
+        .menu-title {
+            font-size: 48px;
+            color: #FFD700;
+            text-shadow: 3px 3px 6px rgba(0,0,0,0.8);
+            margin-bottom: 20px;
+        }
+        
+        .level-btn {
+            display: block;
+            width: 80%;
+            max-width: 300px;
+            margin: 10px auto;
+        }
+        
+        @media (max-width: 768px) {
+            #ui {
+                font-size: 16px;
+            }
+            .menu-title {
+                font-size: 32px;
+            }
+            button {
+                font-size: 16px;
+                padding: 10px 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        <div id="ui">
+            <div class="score">
+                <span id="scoreText">Score: 0</span> | 
+                <span id="timerText">Time: 60</span>
+            </div>
+        </div>
+        <div id="message"></div>
+    </div>
+
+    <script>
+        // Game Configuration
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const ui = document.getElementById('ui');
+        const scoreText = document.getElementById('scoreText');
+        const timerText = document.getElementById('timerText');
+        const messageDiv = document.getElementById('message');
+
+        // Responsive canvas sizing
+        function resizeCanvas() {
+            const maxWidth = window.innerWidth - 20;
+            const maxHeight = window.innerHeight - 20;
+            const aspectRatio = 800 / 600;
+            
+            let width = maxWidth;
+            let height = width / aspectRatio;
+            
+            if (height > maxHeight) {
+                height = maxHeight;
+                width = height * aspectRatio;
+            }
+            
+            canvas.style.width = width + 'px';
+            canvas.style.height = height + 'px';
+        }
+        
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        // Game State
+        const game = {
+            state: 'menu',
+            currentLevel: null,
+            score: 0,
+            highScores: {},
+            time: 60,
+            input: {
+                mouse: { x: 0, y: 0, down: false, clicked: false },
+                touch: { x: 0, y: 0, down: false, tapped: false }
+            }
+        };
+
+        // Input Handling
+        function getCanvasCoords(clientX, clientY) {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            return {
+                x: (clientX - rect.left) * scaleX,
+                y: (clientY - rect.top) * scaleY
+            };
+        }
+
+        canvas.addEventListener('mousedown', (e) => {
+            const coords = getCanvasCoords(e.clientX, e.clientY);
+            game.input.mouse.x = coords.x;
+            game.input.mouse.y = coords.y;
+            game.input.mouse.down = true;
+            game.input.mouse.clicked = true;
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            const coords = getCanvasCoords(e.clientX, e.clientY);
+            game.input.mouse.x = coords.x;
+            game.input.mouse.y = coords.y;
+        });
+
+        canvas.addEventListener('mouseup', () => {
+            game.input.mouse.down = false;
+        });
+
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            const coords = getCanvasCoords(e.touches[0].clientX, e.touches[0].clientY);
+            game.input.touch.x = coords.x;
+            game.input.touch.y = coords.y;
+            game.input.touch.down = true;
+            game.input.touch.tapped = true;
+        });
+
+        canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            const coords = getCanvasCoords(e.touches[0].clientX, e.touches[0].clientY);
+            game.input.touch.x = coords.x;
+            game.input.touch.y = coords.y;
+        });
+
+        canvas.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            game.input.touch.down = false;
+        });
+
+        // Utility Functions
+        function isClicked(x, y, w, h) {
+            const mx = game.input.mouse.x;
+            const my = game.input.mouse.y;
+            const tx = game.input.touch.x;
+            const ty = game.input.touch.y;
+            
+            const mouseClick = game.input.mouse.clicked && mx > x && mx < x + w && my > y && my < y + h;
+            const touchTap = game.input.touch.tapped && tx > x && tx < x + w && ty > y && ty < y + h;
+            
+            return mouseClick || touchTap;
+        }
+
+        function resetInput() {
+            game.input.mouse.clicked = false;
+            game.input.touch.tapped = false;
+        }
+
+        function showMessage(text, buttons = []) {
+            messageDiv.innerHTML = text;
+            buttons.forEach(btn => {
+                const button = document.createElement('button');
+                button.textContent = btn.text;
+                button.onclick = btn.action;
+                messageDiv.appendChild(button);
+            });
+            messageDiv.style.display = 'block';
+        }
+
+        function hideMessage() {
+            messageDiv.style.display = 'none';
+        }
+
+        function updateUI() {
+            scoreText.textContent = `Score: ${game.score}`;
+            timerText.textContent = `Time: ${Math.ceil(game.time)}`;
+        }
+
+        // Drawing Utilities
+        function drawRect(x, y, w, h, color) {
+            ctx.fillStyle = color;
+            ctx.fillRect(x, y, w, h);
+        }
+
+        function drawCircle(x, y, r, color) {
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.arc(x, y, r, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        function drawText(text, x, y, size, color, align = 'center') {
+            ctx.fillStyle = color;
+            ctx.font = `bold ${size}px Georgia`;
+            ctx.textAlign = align;
+            ctx.textBaseline = 'middle';
+            ctx.fillText(text, x, y);
+        }
+
+        function drawButton(text, x, y, w, h) {
+            const gradient = ctx.createLinearGradient(x, y, x, y + h);
+            gradient.addColorStop(0, '#D2691E');
+            gradient.addColorStop(1, '#8B4513');
+            
+            ctx.fillStyle = gradient;
+            ctx.fillRect(x, y, w, h);
+            
+            ctx.strokeStyle = '#654321';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(x, y, w, h);
+            
+            drawText(text, x + w/2, y + h/2, 24, 'white');
+        }
+
+        // Character Drawing Functions
+        function drawRyan(x, y, size = 40) {
+            // Head
+            drawCircle(x, y - size/2, size/3, '#F4A460');
+            // Hat
+            ctx.fillStyle = '#8B4513';
+            ctx.fillRect(x - size/2, y - size, size, size/4);
+            ctx.fillRect(x - size/3, y - size * 1.2, size * 0.66, size/5);
+            // Body
+            drawRect(x - size/4, y - size/4, size/2, size, '#4169E1');
+            // M6 Logo
+            drawText('M6', x, y + size/4, 12, 'white');
+        }
+
+        function drawDog(x, y, color) {
+            // Body
+            drawCircle(x, y, 15, color);
+            // Head
+            drawCircle(x, y - 12, 12, color);
+            // Ears
+            drawCircle(x - 8, y - 15, 6, color);
+            drawCircle(x + 8, y - 15, 6, color);
+            // Eyes
+            drawCircle(x - 4, y - 12, 2, 'black');
+            drawCircle(x + 4, y - 12, 2, 'black');
+        }
+
+        function drawBobcat(x, y, angle = 0) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(angle);
+            
+            // Body
+            drawRect(-30, -20, 60, 40, '#FFD700');
+            // Tracks
+            drawRect(-35, -25, 8, 50, '#333');
+            drawRect(27, -25, 8, 50, '#333');
+            // Cabin
+            drawRect(-15, -30, 30, 25, '#FF4500');
+            // Attachment
+            drawRect(-10, 20, 20, 15, '#888');
+            
+            ctx.restore();
+        }
+
+        function drawTree(x, y) {
+            // Trunk
+            drawRect(x - 5, y - 20, 10, 20, '#654321');
+            // Foliage
+            drawCircle(x, y - 30, 15, '#228B22');
+            drawCircle(x - 10, y - 25, 12, '#2E8B57');
+            drawCircle(x + 10, y - 25, 12, '#2E8B57');
+        }
+
+        function drawLonghorn(x, y) {
+            // Body
+            ctx.fillStyle = '#8B4513';
+            ctx.fillRect(x - 20, y - 15, 40, 25);
+            // Head
+            drawCircle(x + 20, y - 5, 10, '#A0522D');
+            // Horns
+            ctx.strokeStyle = '#FFF';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(x + 15, y - 12);
+            ctx.lineTo(x, y - 20);
+            ctx.moveTo(x + 25, y - 12);
+            ctx.lineTo(x + 40, y - 20);
+            ctx.stroke();
+            // Legs
+            drawRect(x - 15, y + 10, 6, 15, '#654321');
+            drawRect(x + 9, y + 10, 6, 15, '#654321');
+        }
+
+        function drawHog(x, y) {
+            // Body
+            drawCircle(x, y, 18, '#555');
+            // Head
+            drawCircle(x + 15, y - 5, 12, '#555');
+            // Snout
+            drawCircle(x + 22, y - 5, 6, '#666');
+            // Eye (red in infrared)
+            drawCircle(x + 18, y - 8, 3, '#FF0000');
+        }
+
+        function drawChicken(x, y) {
+            // Body
+            drawCircle(x, y, 12, '#FFF');
+            // Head
+            drawCircle(x - 8, y - 10, 8, '#FFF');
+            // Comb
+            ctx.fillStyle = '#FF0000';
+            ctx.beginPath();
+            ctx.moveTo(x - 10, y - 15);
+            ctx.lineTo(x - 8, y - 18);
+            ctx.lineTo(x - 6, y - 15);
+            ctx.fill();
+            // Beak
+            ctx.fillStyle = '#FFA500';
+            ctx.beginPath();
+            ctx.moveTo(x - 12, y - 10);
+            ctx.lineTo(x - 16, y - 9);
+            ctx.lineTo(x - 12, y - 8);
+            ctx.fill();
+        }
+
+        function drawHorse(x, y) {
+            // Body
+            ctx.fillStyle = '#8B4513';
+            ctx.fillRect(x - 25, y - 20, 50, 30);
+            // Head
+            ctx.fillRect(x + 25, y - 30, 15, 25);
+            // Legs
+            drawRect(x - 20, y + 10, 8, 20, '#654321');
+            drawRect(x + 12, y + 10, 8, 20, '#654321');
+            // Mane
+            ctx.fillStyle = '#654321';
+            ctx.fillRect(x + 25, y - 35, 15, 10);
+        }
+
+        function drawPotato(x, y, size = 10) {
+            ctx.fillStyle = '#CD853F';
+            ctx.beginPath();
+            ctx.ellipse(x, y, size, size * 0.7, 0, 0, Math.PI * 2);
+            ctx.fill();
+            // Eyes
+            ctx.fillStyle = '#000';
+            ctx.fillRect(x - 3, y - 2, 2, 2);
+            ctx.fillRect(x + 1, y - 2, 2, 2);
+        }
+
+        function drawFish(x, y, size = 15) {
+            // Body
+            ctx.fillStyle = '#FF6347';
+            ctx.beginPath();
+            ctx.ellipse(x, y, size, size * 0.6, 0, 0, Math.PI * 2);
+            ctx.fill();
+            // Tail
+            ctx.beginPath();
+            ctx.moveTo(x - size, y);
+            ctx.lineTo(x - size * 1.5, y - size * 0.5);
+            ctx.lineTo(x - size * 1.5, y + size * 0.5);
+            ctx.closePath();
+            ctx.fill();
+            // Eye
+            drawCircle(x + size * 0.5, y - size * 0.2, 2, '#000');
+        }
+
+        // ========== LEVEL 1: CEDAR FEVER (Bobcat Tree Pulling) ==========
+        const cedarFever = {
+            bobcat: { x: 400, y: 500, angle: 0, speed: 3 },
+            trees: [],
+            longhorns: [],
+            score: 0,
+            time: 60,
+            treesRemoved: 0,
+            combo: 0,
+            lastTreeTime: 0,
+            
+            init() {
+                this.bobcat = { x: 400, y: 500, angle: 0, speed: 3 };
+                this.trees = [];
+                this.longhorns = [];
+                this.score = 0;
+                this.time = 60;
+                this.treesRemoved = 0;
+                this.combo = 0;
+                
+                // Spawn trees
+                for (let i = 0; i < 25; i++) {
+                    this.trees.push({
+                        x: Math.random() * 700 + 50,
+                        y: Math.random() * 400 + 50,
+                        pulled: false
+                    });
+                }
+                
+                // Spawn longhorns
+                for (let i = 0; i < 3; i++) {
+                    this.longhorns.push({
+                        x: Math.random() * 700 + 50,
+                        y: Math.random() * 400 + 50,
+                        vx: (Math.random() - 0.5) * 2,
+                        vy: (Math.random() - 0.5) * 2
+                    });
+                }
+            },
+            
+            update(dt) {
+                this.time -= dt;
+                if (this.time <= 0) {
+                    this.end();
+                    return;
+                }
+                
+                // Bobcat movement
+                const input = game.input;
+                let targetX = this.bobcat.x;
+                let targetY = this.bobcat.y;
+                
+                if (input.mouse.down) {
+                    targetX = input.mouse.x;
+                    targetY = input.mouse.y;
+                } else if (input.touch.down) {
+                    targetX = input.touch.x;
+                    targetY = input.touch.y;
+                }
+                
+                const dx = targetX - this.bobcat.x;
+                const dy = targetY - this.bobcat.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                
+                if (dist > 5) {
+                    this.bobcat.angle = Math.atan2(dy, dx);
+                    this.bobcat.x += (dx / dist) * this.bobcat.speed;
+                    this.bobcat.y += (dy / dist) * this.bobcat.speed;
+                }
+                
+                // Keep in bounds
+                this.bobcat.x = Math.max(30, Math.min(770, this.bobcat.x));
+                this.bobcat.y = Math.max(30, Math.min(570, this.bobcat.y));
+                
+                // Check tree collision
+                this.trees.forEach(tree => {
+                    if (!tree.pulled) {
+                        const tdx = tree.x - this.bobcat.x;
+                        const tdy = tree.y - this.bobcat.y;
+                        const tdist = Math.sqrt(tdx * tdx + tdy * tdy);
+                        
+                        if (tdist < 40) {
+                            tree.pulled = true;
+                            this.treesRemoved++;
+                            
+                            // Combo system
+                            const now = Date.now();
+                            if (now - this.lastTreeTime < 2000) {
+                                this.combo++;
+                            } else {
+                                this.combo = 1;
+                            }
+                            this.lastTreeTime = now;
+                            
+                            this.score += 10 * this.combo;
+                            game.score = this.score;
+                        }
+                    }
+                });
+                
+                // Move longhorns
+                this.longhorns.forEach(horn => {
+                    horn.x += horn.vx;
+                    horn.y += horn.vy;
+                    
+                    if (horn.x < 50 || horn.x > 750) horn.vx *= -1;
+                    if (horn.y < 50 || horn.y > 550) horn.vy *= -1;
+                });
+                
+                game.time = this.time;
+                updateUI();
+            },
+            
+            draw() {
+                // Sky
+                ctx.fillStyle = '#87CEEB';
+                ctx.fillRect(0, 0, 800, 600);
+                
+                // Ground
+                ctx.fillStyle = '#9ACD32';
+                ctx.fillRect(0, 0, 800, 600);
+                
+                // Title
+                drawText('CEDAR FEVER', 400, 30, 32, '#654321');
+                drawText(`Combo: x${this.combo}`, 400, 60, 20, '#FF4500');
+                
+                // Trees
+                this.trees.forEach(tree => {
+                    if (!tree.pulled) {
+                        drawTree(tree.x, tree.y);
+                    }
+                });
+                
+                // Longhorns
+                this.longhorns.forEach(horn => {
+                    drawLonghorn(horn.x, horn.y);
+                });
+                
+                // Bobcat
+                drawBobcat(this.bobcat.x, this.bobcat.y, this.bobcat.angle);
+                
+                // Instructions
+                drawText('Tap/Click to drive! Pull trees!', 400, 580, 18, 'white');
+            },
+            
+            end() {
+                game.state = 'levelEnd';
+                game.highScores.cedarFever = Math.max(game.highScores.cedarFever || 0, this.score);
+                showMessage(
+                    `<div class="menu-title">Cedar Fever Complete!</div>
+                    <p>Trees Removed: ${this.treesRemoved}</p>
+                    <p>Score: ${this.score}</p>
+                    <p>Best: ${game.highScores.cedarFever}</p>`,
+                    [
+                        { text: 'Play Again', action: () => { game.state = 'level1'; cedarFever.init(); hideMessage(); } },
+                        { text: 'Main Menu', action: () => { game.state = 'menu'; hideMessage(); } }
+                    ]
+                );
+            }
+        };
+
+        // ========== LEVEL 2: HOG WILD (Infrared Hunting) ==========
+        const hogWild = {
+            hogs: [],
+            decoys: [],
+            score: 0,
+            time: 60,
+            hogsTagged: 0,
+            penalties: 0,
+            
+            init() {
+                this.hogs = [];
+                this.decoys = [];
+                this.score = 0;
+                this.time = 60;
+                this.hogsTagged = 0;
+                this.penalties = 0;
+                
+                // Spawn hogs
+                for (let i = 0; i < 15; i++) {
+                    this.hogs.push({
+                        x: Math.random() * 700 + 50,
+                        y: Math.random() * 500 + 50,
+                        vx: (Math.random() - 0.5) * 2,
+                        vy: (Math.random() - 0.5) * 2,
+                        tagged: false
+                    });
+                }
+                
+                // Spawn decoys (Chip, deer)
+                for (let i = 0; i < 8; i++) {
+                    this.decoys.push({
+                        x: Math.random() * 700 + 50,
+                        y: Math.random() * 500 + 50,
+                        vx: (Math.random() - 0.5) * 1.5,
+                        vy: (Math.random() - 0.5) * 1.5,
+                        type: Math.random() > 0.5 ? 'chip' : 'deer'
+                    });
+                }
+            },
+            
+            update(dt) {
+                this.time -= dt;
+                if (this.time <= 0) {
+                    this.end();
+                    return;
+                }
+                
+                // Move hogs
+                this.hogs.forEach(hog => {
+                    if (!hog.tagged) {
+                        hog.x += hog.vx;
+                        hog.y += hog.vy;
+                        
+                        if (hog.x < 50 || hog.x > 750) hog.vx *= -1;
+                        if (hog.y < 50 || hog.y > 550) hog.vy *= -1;
+                    }
+                });
+                
+                // Move decoys
+                this.decoys.forEach(decoy => {
+                    decoy.x += decoy.vx;
+                    decoy.y += decoy.vy;
+                    
+                    if (decoy.x < 50 || decoy.x > 750) decoy.vx *= -1;
+                    if (decoy.y < 50 || decoy.y > 550) decoy.vy *= -1;
+                });
+                
+                // Check clicks
+                const mx = game.input.mouse.clicked ? game.input.mouse.x : -1;
+                const my = game.input.mouse.clicked ? game.input.mouse.y : -1;
+                const tx = game.input.touch.tapped ? game.input.touch.x : -1;
+                const ty = game.input.touch.tapped ? game.input.touch.y : -1;
+                
+                const clickX = mx >= 0 ? mx : tx;
+                const clickY = my >= 0 ? my : ty;
+                
+                if (clickX >= 0) {
+                    // Check hog hits
+                    let hit = false;
+                    this.hogs.forEach(hog => {
+                        if (!hog.tagged) {
+                            const dx = hog.x - clickX;
+                            const dy = hog.y - clickY;
+                            const dist = Math.sqrt(dx * dx + dy * dy);
+                            
+                            if (dist < 30) {
+                                hog.tagged = true;
+                                this.hogsTagged++;
+                                this.score += 20;
+                                game.score = this.score;
+                                hit = true;
+                            }
+                        }
+                    });
+                    
+                    // Check decoy hits (penalty)
+                    if (!hit) {
+                        this.decoys.forEach(decoy => {
+                            const dx = decoy.x - clickX;
+                            const dy = decoy.y - clickY;
+                            const dist = Math.sqrt(dx * dx + dy * dy);
+                            
+                            if (dist < 30) {
+                                this.penalties++;
+                                this.score = Math.max(0, this.score - 10);
+                                game.score = this.score;
+                            }
+                        });
+                    }
+                }
+                
+                game.time = this.time;
+                updateUI();
+            },
+            
+            draw() {
+                // Night sky (black)
+                ctx.fillStyle = '#000';
+                ctx.fillRect(0, 0, 800, 600);
+                
+                // Infrared overlay
+                ctx.fillStyle = 'rgba(0, 255, 0, 0.05)';
+                ctx.fillRect(0, 0, 800, 600);
+                
+                // Title
+                drawText('HOG WILD', 400, 30, 32, '#00FF00');
+                drawText('Infrared Mode - Tag the Hogs!', 400, 60, 18, '#00FF00');
+                
+                // Hogs (red heat signature)
+                this.hogs.forEach(hog => {
+                    if (!hog.tagged) {
+                        // Heat glow
+                        const gradient = ctx.createRadialGradient(hog.x, hog.y, 0, hog.x, hog.y, 40);
+                        gradient.addColorStop(0, 'rgba(255, 0, 0, 0.8)');
+                        gradient.addColorStop(1, 'rgba(255, 0, 0, 0)');
+                        ctx.fillStyle = gradient;
+                        ctx.fillRect(hog.x - 40, hog.y - 40, 80, 80);
+                        
+                        // Hog silhouette
+                        ctx.fillStyle = '#FF0000';
+                        drawHog(hog.x, hog.y);
+                    }
+                });
+                
+                // Decoys (orange/yellow heat)
+                this.decoys.forEach(decoy => {
+                    const gradient = ctx.createRadialGradient(decoy.x, decoy.y, 0, decoy.x, decoy.y, 35);
+                    gradient.addColorStop(0, 'rgba(255, 165, 0, 0.6)');
+                    gradient.addColorStop(1, 'rgba(255, 165, 0, 0)');
+                    ctx.fillStyle = gradient;
+                    ctx.fillRect(decoy.x - 35, decoy.y - 35, 70, 70);
+                    
+                    if (decoy.type === 'chip') {
+                        ctx.fillStyle = '#FFA500';
+                        drawDog(decoy.x, decoy.y, '#FFA500');
+                    } else {
+                        // Deer
+                        ctx.fillStyle = '#FFD700';
+                        ctx.fillRect(decoy.x - 15, decoy.y - 10, 30, 20);
+                        ctx.fillRect(decoy.x + 10, decoy.y - 20, 10, 15);
+                    }
+                });
+                
+                // Crosshair
+                const crossX = game.input.mouse.x || game.input.touch.x || 400;
+                const crossY = game.input.mouse.y || game.input.touch.y || 300;
+                ctx.strokeStyle = '#00FF00';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(crossX - 20, crossY);
+                ctx.lineTo(crossX + 20, crossY);
+                ctx.moveTo(crossX, crossY - 20);
+                ctx.lineTo(crossX, crossY + 20);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.arc(crossX, crossY, 30, 0, Math.PI * 2);
+                ctx.stroke();
+                
+                // Stats
+                drawText(`Tagged: ${this.hogsTagged} | Mistakes: ${this.penalties}`, 400, 580, 18, '#00FF00');
+            },
+            
+            end() {
+                game.state = 'levelEnd';
+                game.highScores.hogWild = Math.max(game.highScores.hogWild || 0, this.score);
+                showMessage(
+                    `<div class="menu-title">Hog Wild Complete!</div>
+                    <p>Hogs Tagged: ${this.hogsTagged}</p>
+                    <p>Mistakes: ${this.penalties}</p>
+                    <p>Score: ${this.score}</p>
+                    <p>Best: ${game.highScores.hogWild}</p>`,
+                    [
+                        { text: 'Play Again', action: () => { game.state = 'level2'; hogWild.init(); hideMessage(); } },
+                        { text: 'Main Menu', action: () => { game.state = 'menu'; hideMessage(); } }
+                    ]
+                );
+            }
+        };
+
+        // ========== LEVEL 3: SPUD LAUNCHER (Potato Gun) ==========
+        const spudLauncher = {
+            potato: null,
+            targets: [],
+            score: 0,
+            time: 60,
+            targetsHit: 0,
+            shots: 0,
+            charging: false,
+            chargeStart: null,
+            launchAngle: 0,
+            launchPower: 0,
+            
+            init() {
+                this.potato = null;
+                this.targets = [];
+                this.score = 0;
+                this.time = 60;
+                this.targetsHit = 0;
+                this.shots = 0;
+                this.charging = false;
+                
+                // Spawn targets
+                for (let i = 0; i < 12; i++) {
+                    this.targets.push({
+                        x: Math.random() * 400 + 300,
+                        y: Math.random() * 200 + 350,
+                        hit: false,
+                        type: Math.random() > 0.7 ? 'bonus' : 'normal'
+                    });
+                }
+            },
+            
+            update(dt) {
+                this.time -= dt;
+                if (this.time <= 0) {
+                    this.end();
+                    return;
+                }
+                
+                // Calculate launch angle and power
+                const startX = 100;
+                const startY = 500;
+                const mx = game.input.mouse.x || game.input.touch.x || 400;
+                const my = game.input.mouse.y || game.input.touch.y || 300;
+                
+                const dx = mx - startX;
+                const dy = my - startY;
+                this.launchAngle = Math.atan2(dy, dx);
+                this.launchPower = Math.min(Math.sqrt(dx * dx + dy * dy) / 3, 100);
+                
+                // Launch potato
+                if (!this.potato && (game.input.mouse.down || game.input.touch.down)) {
+                    if (!this.charging) {
+                        this.charging = true;
+                        this.chargeStart = Date.now();
+                    }
+                } else if (this.charging) {
+                    this.charging = false;
+                    const power = Math.min((Date.now() - this.chargeStart) / 20, 20);
+                    this.launchPotato(startX, startY, this.launchAngle, power);
+                    this.shots++;
+                }
+                
+                // Update potato
+                if (this.potato) {
+                    this.potato.vx += 0;
+                    this.potato.vy += 0.3; // Gravity
+                    this.potato.x += this.potato.vx;
+                    this.potato.y += this.potato.vy;
+                    this.potato.rotation += 0.1;
+                    
+                    // Check target collisions
+                    this.targets.forEach(target => {
+                        if (!target.hit) {
+                            const dx = target.x - this.potato.x;
+                            const dy = target.y - this.potato.y;
+                            const dist = Math.sqrt(dx * dx + dy * dy);
+                            
+                            if (dist < 25) {
+                                target.hit = true;
+                                this.targetsHit++;
+                                const points = target.type === 'bonus' ? 30 : 15;
+                                this.score += points;
+                                game.score = this.score;
+                                this.potato = null;
+                            }
+                        }
+                    });
+                    
+                    // Remove if out of bounds
+                    if (this.potato && (this.potato.x > 850 || this.potato.y > 650 || this.potato.x < -50)) {
+                        this.potato = null;
+                    }
+                }
+                
+                game.time = this.time;
+                updateUI();
+            },
+            
+            launchPotato(x, y, angle, power) {
+                this.potato = {
+                    x: x,
+                    y: y,
+                    vx: Math.cos(angle) * power,
+                    vy: Math.sin(angle) * power,
+                    rotation: 0
+                };
+            },
+            
+            draw() {
+                // Sky
+                ctx.fillStyle = '#87CEEB';
+                ctx.fillRect(0, 0, 800, 600);
+                
+                // Ground
+                ctx.fillStyle = '#9ACD32';
+                ctx.fillRect(0, 400, 800, 200);
+                
+                // Title
+                drawText('SPUD LAUNCHER', 400, 30, 32, '#654321');
+                
+                // Targets
+                this.targets.forEach(target => {
+                    if (!target.hit) {
+                        if (target.type === 'bonus') {
+                            ctx.fillStyle = '#FFD700';
+                            ctx.beginPath();
+                            ctx.arc(target.x, target.y, 20, 0, Math.PI * 2);
+                            ctx.fill();
+                            ctx.strokeStyle = '#FF4500';
+                            ctx.lineWidth = 3;
+                            ctx.stroke();
+                        } else {
+                            // Can
+                            ctx.fillStyle = '#C0C0C0';
+                            ctx.fillRect(target.x - 15, target.y - 20, 30, 40);
+                            ctx.strokeStyle = '#888';
+                            ctx.lineWidth = 2;
+                            ctx.strokeRect(target.x - 15, target.y - 20, 30, 40);
+                        }
+                    }
+                });
+                
+                // Launch platform
+                ctx.fillStyle = '#8B4513';
+                ctx.fillRect(50, 450, 100, 50);
+                
+                // Ryan with potato gun
+                drawRyan(100, 480);
+                
+                // Potato gun
+                const startX = 100;
+                const startY = 500;
+                ctx.save();
+                ctx.translate(startX, startY);
+                ctx.rotate(this.launchAngle);
+                ctx.fillStyle = '#654321';
+                ctx.fillRect(0, -10, 60, 20);
+                ctx.restore();
+                
+                // Aim line
+                if (!this.potato) {
+                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+                    ctx.setLineDash([5, 5]);
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(startX, startY);
+                    ctx.lineTo(
+                        startX + Math.cos(this.launchAngle) * this.launchPower * 3,
+                        startY + Math.sin(this.launchAngle) * this.launchPower * 3
+                    );
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                    
+                    // Power bar
+                    if (this.charging) {
+                        const chargePower = Math.min((Date.now() - this.chargeStart) / 20, 20);
+                        ctx.fillStyle = '#FF4500';
+                        ctx.fillRect(80, 520, chargePower * 5, 10);
+                        ctx.strokeStyle = '#FFF';
+                        ctx.strokeRect(80, 520, 100, 10);
+                    }
+                }
+                
+                // Flying potato
+                if (this.potato) {
+                    ctx.save();
+                    ctx.translate(this.potato.x, this.potato.y);
+                    ctx.rotate(this.potato.rotation);
+                    drawPotato(0, 0, 12);
+                    ctx.restore();
+                }
+                
+                // Instructions
+                drawText('Hold & Release to launch!', 400, 580, 18, 'white');
+                drawText(`Shots: ${this.shots} | Hits: ${this.targetsHit}`, 400, 60, 18, '#654321');
+            },
+            
+            end() {
+                game.state = 'levelEnd';
+                game.highScores.spudLauncher = Math.max(game.highScores.spudLauncher || 0, this.score);
+                const accuracy = this.shots > 0 ? Math.round((this.targetsHit / this.shots) * 100) : 0;
+                showMessage(
+                    `<div class="menu-title">Spud Launcher Complete!</div>
+                    <p>Targets Hit: ${this.targetsHit} / ${this.shots}</p>
+                    <p>Accuracy: ${accuracy}%</p>
+                    <p>Score: ${this.score}</p>
+                    <p>Best: ${game.highScores.spudLauncher}</p>`,
+                    [
+                        { text: 'Play Again', action: () => { game.state = 'level3'; spudLauncher.init(); hideMessage(); } },
+                        { text: 'Main Menu', action: () => { game.state = 'menu'; hideMessage(); } }
+                    ]
+                );
+            }
+        };
+
+        // ========== LEVEL 4: CLUCK DEFENSE (Save the Chickens) ==========
+        const cluckDefense = {
+            chickens: [],
+            barriers: [],
+            dogs: [],
+            wave: 0,
+            totalWaves: 10,
+            score: 0,
+            time: 90,
+            chickensLost: 0,
+            barrierCost: 50,
+            money: 200,
+            waveActive: false,
+            waveTimer: 0,
+            
+            init() {
+                this.chickens = [];
+                this.barriers = [];
+                this.dogs = [];
+                this.wave = 0;
+                this.score = 0;
+                this.time = 90;
+                this.chickensLost = 0;
+                this.money = 200;
+                this.waveActive = false;
+                this.waveTimer = 0;
+                
+                // Spawn chickens in coop
+                for (let i = 0; i < 6; i++) {
+                    this.chickens.push({
+                        x: 600 + (i % 3) * 30,
+                        y: 250 + Math.floor(i / 3) * 30,
+                        alive: true
+                    });
+                }
+            },
+            
+            update(dt) {
+                this.time -= dt;
+                if (this.time <= 0 || this.wave >= this.totalWaves) {
+                    this.end();
+                    return;
+                }
+                
+                // Wave management
+                if (!this.waveActive) {
+                    this.waveTimer += dt;
+                    if (this.waveTimer >= 5) {
+                        this.startWave();
+                        this.waveTimer = 0;
+                    }
+                } else {
+                    // Move dogs
+                    this.dogs = this.dogs.filter(dog => {
+                        if (!dog.stopped) {
+                            dog.x += Math.cos(dog.angle) * dog.speed;
+                            dog.y += Math.sin(dog.angle) * dog.speed;
+                            
+                            // Check barrier collision
+                            let blocked = false;
+                            this.barriers.forEach(barrier => {
+                                const dx = barrier.x - dog.x;
+                                const dy = barrier.y - dog.y;
+                                const dist = Math.sqrt(dx * dx + dy * dy);
+                                if (dist < 40) {
+                                    blocked = true;
+                                    dog.stopped = true;
+                                    setTimeout(() => {
+                                        dog.stopped = false;
+                                        dog.angle += Math.PI;
+                                    }, 2000);
+                                }
+                            });
+                            
+                            // Check chicken collision
+                            if (!blocked) {
+                                this.chickens.forEach(chicken => {
+                                    if (chicken.alive) {
+                                        const dx = chicken.x - dog.x;
+                                        const dy = chicken.y - dog.y;
+                                        const dist = Math.sqrt(dx * dx + dy * dy);
+                                        if (dist < 25) {
+                                            chicken.alive = false;
+                                            this.chickensLost++;
+                                            this.score = Math.max(0, this.score - 50);
+                                            game.score = this.score;
+                                            return false;
+                                        }
+                                    }
+                                });
+                            }
+                            
+                            // Remove if off screen
+                            return dog.x > -50 && dog.x < 850 && dog.y > -50 && dog.y < 650;
+                        }
+                        return true;
+                    });
+                    
+                    // Check if wave complete
+                    if (this.dogs.length === 0) {
+                        this.waveActive = false;
+                        this.score += 100;
+                        this.money += 100;
+                        game.score = this.score;
+                    }
+                }
+                
+                // Place barriers on click
+                if (isClicked(0, 0, 800, 600) && !this.waveActive) {
+                    const x = game.input.mouse.clicked ? game.input.mouse.x : game.input.touch.x;
+                    const y = game.input.mouse.clicked ? game.input.mouse.y : game.input.touch.y;
+                    
+                    if (this.money >= this.barrierCost && x < 550) {
+                        this.barriers.push({ x, y });
+                        this.money -= this.barrierCost;
+                    }
+                }
+                
+                game.time = this.time;
+                updateUI();
+            },
+            
+            startWave() {
+                this.wave++;
+                this.waveActive = true;
+                
+                const dogCount = Math.min(2 + this.wave, 6);
+                const isChipWave = this.wave % 2 === 1;
+                const isOtisWave = this.wave % 2 === 0;
+                const isBothWave = this.wave >= 5;
+                
+                for (let i = 0; i < dogCount; i++) {
+                    let color = '#F4A460';
+                    if (isBothWave) {
+                        color = i % 2 === 0 ? '#F4A460' : '#000';
+                    } else if (isChipWave) {
+                        color = '#F4A460';
+                    } else if (isOtisWave) {
+                        color = '#000';
+                    }
+                    
+                    this.dogs.push({
+                        x: Math.random() * 200 + 50,
+                        y: Math.random() * 400 + 100,
+                        angle: 0,
+                        speed: 1 + this.wave * 0.1,
+                        color: color,
+                        stopped: false
+                    });
+                    
+                    // Point towards coop
+                    const dog = this.dogs[this.dogs.length - 1];
+                    const dx = 600 - dog.x;
+                    const dy = 280 - dog.y;
+                    dog.angle = Math.atan2(dy, dx);
+                }
+            },
+            
+            draw() {
+                // Background
+                ctx.fillStyle = '#9ACD32';
+                ctx.fillRect(0, 0, 800, 600);
+                
+                // Title
+                drawText('CLUCK DEFENSE', 400, 30, 32, '#654321');
+                drawText(`Wave ${this.wave}/${this.totalWaves}`, 400, 60, 20, '#654321');
+                
+                // Chicken coop
+                ctx.fillStyle = '#8B0000';
+                ctx.fillRect(550, 200, 200, 150);
+                ctx.fillStyle = '#654321';
+                ctx.beginPath();
+                ctx.moveTo(550, 200);
+                ctx.lineTo(650, 150);
+                ctx.lineTo(750, 200);
+                ctx.closePath();
+                ctx.fill();
+                
+                // Chickens
+                this.chickens.forEach(chicken => {
+                    if (chicken.alive) {
+                        drawChicken(chicken.x, chicken.y);
+                    }
+                });
+                
+                // Barriers
+                this.barriers.forEach(barrier => {
+                    ctx.fillStyle = '#8B4513';
+                    ctx.fillRect(barrier.x - 20, barrier.y - 20, 40, 40);
+                    ctx.strokeStyle = '#654321';
+                    ctx.lineWidth = 3;
+                    ctx.strokeRect(barrier.x - 20, barrier.y - 20, 40, 40);
+                });
+                
+                // Dogs
+                this.dogs.forEach(dog => {
+                    drawDog(dog.x, dog.y, dog.color);
+                    if (dog.stopped) {
+                        drawText('!', dog.x, dog.y - 25, 20, '#FF0000');
+                    }
+                });
+                
+                // Money and instructions
+                drawText(`Money: $${this.money} | Barrier Cost: $${this.barrierCost}`, 200, 580, 18, 'white');
+                if (!this.waveActive) {
+                    drawText('Tap to place barriers! Next wave in ' + Math.ceil(5 - this.waveTimer) + 's', 500, 580, 16, 'white');
+                } else {
+                    drawText('Defend the chickens!', 500, 580, 18, 'white');
+                }
+                
+                // Chickens alive
+                const alive = this.chickens.filter(c => c.alive).length;
+                drawText(`Chickens: ${alive}/6`, 650, 380, 18, '#FFD700');
+            },
+            
+            end() {
+                game.state = 'levelEnd';
+                game.highScores.cluckDefense = Math.max(game.highScores.cluckDefense || 0, this.score);
+                const alive = this.chickens.filter(c => c.alive).length;
+                showMessage(
+                    `<div class="menu-title">Cluck Defense Complete!</div>
+                    <p>Waves Survived: ${this.wave}/${this.totalWaves}</p>
+                    <p>Chickens Saved: ${alive}/6</p>
+                    <p>Score: ${this.score}</p>
+                    <p>Best: ${game.highScores.cluckDefense}</p>`,
+                    [
+                        { text: 'Play Again', action: () => { game.state = 'level4'; cluckDefense.init(); hideMessage(); } },
+                        { text: 'Main Menu', action: () => { game.state = 'menu'; hideMessage(); } }
+                    ]
+                );
+            }
+        };
+
+        // ========== LEVEL 5: POND BOSS (Fishing) ==========
+        const pondBoss = {
+            bobber: null,
+            fish: [],
+            caughtFish: [],
+            score: 0,
+            time: 60,
+            casting: false,
+            waiting: false,
+            biteTimer: 0,
+            biting: false,
+            reeling: false,
+            tension: 0,
+            chipInWater: false,
+            chipTimer: 0,
+            
+            init() {
+                this.bobber = null;
+                this.fish = [];
+                this.caughtFish = [];
+                this.score = 0;
+                this.time = 60;
+                this.casting = false;
+                this.waiting = false;
+                this.biting = false;
+                this.reeling = false;
+                this.chipInWater = false;
+                
+                // Spawn fish
+                for (let i = 0; i < 10; i++) {
+                    this.fish.push({
+                        x: Math.random() * 600 + 100,
+                        y: Math.random() * 150 + 350,
+                        vx: (Math.random() - 0.5) * 2,
+                        size: Math.random() * 10 + 10,
+                        type: Math.random() > 0.8 ? 'rare' : 'common'
+                    });
+                }
+                
+                // Random Chip event
+                if (Math.random() > 0.5) {
+                    this.chipTimer = Math.random() * 30 + 20;
+                }
+            },
+            
+            update(dt) {
+                this.time -= dt;
+                if (this.time <= 0) {
+                    this.end();
+                    return;
+                }
+                
+                // Chip event
+                if (!this.chipInWater && this.chipTimer > 0) {
+                    this.chipTimer -= dt;
+                    if (this.chipTimer <= 0) {
+                        this.chipInWater = true;
+                        // Scare fish away
+                        this.fish.forEach(fish => {
+                            fish.vx *= 3;
+                        });
+                    }
+                }
+                
+                // Move fish
+                this.fish.forEach(fish => {
+                    fish.x += fish.vx;
+                    if (fish.x < 100 || fish.x > 700) fish.vx *= -1;
+                });
+                
+                // Casting
+                if (!this.bobber && isClicked(0, 0, 800, 600)) {
+                    const x = game.input.mouse.clicked ? game.input.mouse.x : game.input.touch.x;
+                    const y = game.input.mouse.clicked ? game.input.mouse.y : game.input.touch.y;
+                    
+                    if (x > 100 && x < 700 && y > 300 && y < 500) {
+                        this.bobber = { x, y };
+                        this.waiting = true;
+                        this.biteTimer = Math.random() * 5 + 3;
+                    }
+                }
+                
+                // Waiting for bite
+                if (this.waiting && this.bobber) {
+                    this.biteTimer -= dt;
+                    
+                    // Check if fish nearby
+                    let fishNearby = false;
+                    this.fish.forEach(fish => {
+                        const dx = fish.x - this.bobber.x;
+                        const dy = fish.y - this.bobber.y;
+                        const dist = Math.sqrt(dx * dx + dy * dy);
+                        if (dist < 50) {
+                            fishNearby = true;
+                        }
+                    });
+                    
+                    if (this.biteTimer <= 0 && fishNearby && !this.chipInWater) {
+                        this.biting = true;
+                        this.waiting = false;
+                    }
+                }
+                
+                // Catch fish
+                if (this.biting && isClicked(0, 0, 800, 600)) {
+                    this.reeling = true;
+                    this.biting = false;
+                    
+                    // Find nearest fish
+                    let nearest = null;
+                    let minDist = Infinity;
+                    this.fish.forEach((fish, idx) => {
+                        const dx = fish.x - this.bobber.x;
+                        const dy = fish.y - this.bobber.y;
+                        const dist = Math.sqrt(dx * dx + dy * dy);
+                        if (dist < minDist && dist < 50) {
+                            minDist = dist;
+                            nearest = { fish, idx };
+                        }
+                    });
+                    
+                    if (nearest) {
+                        const caught = nearest.fish;
+                        this.fish.splice(nearest.idx, 1);
+                        this.caughtFish.push(caught);
+                        const points = caught.type === 'rare' ? 50 : 20;
+                        this.score += points;
+                        game.score = this.score;
+                    }
+                    
+                    this.bobber = null;
+                    this.reeling = false;
+                } else if (this.biting) {
+                    // Bite timeout
+                    this.biteTimer += dt;
+                    if (this.biteTimer > 2) {
+                        this.bobber = null;
+                        this.biting = false;
+                    }
+                }
+                
+                // Catch Chip
+                if (this.chipInWater && this.bobber && isClicked(0, 0, 800, 600)) {
+                    const dx = 400 - this.bobber.x;
+                    const dy = 450 - this.bobber.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist < 60) {
+                        this.score += 100;
+                        game.score = this.score;
+                        this.chipInWater = false;
+                        this.bobber = null;
+                    }
+                }
+                
+                game.time = this.time;
+                updateUI();
+            },
+            
+            draw() {
+                // Sky
+                const gradient = ctx.createLinearGradient(0, 0, 0, 600);
+                gradient.addColorStop(0, '#FFD700');
+                gradient.addColorStop(0.5, '#FFA500');
+                gradient.addColorStop(1, '#FF6347');
+                ctx.fillStyle = gradient;
+                ctx.fillRect(0, 0, 800, 300);
+                
+                // Pond
+                ctx.fillStyle = '#4682B4';
+                ctx.fillRect(0, 300, 800, 300);
+                
+                // Title
+                drawText('POND BOSS', 400, 30, 32, 'white');
+                
+                // Ground
+                ctx.fillStyle = '#9ACD32';
+                ctx.fillRect(0, 500, 800, 100);
+                
+                // Ryan fishing
+                drawRyan(100, 480);
+                
+                // Fishing rod
+                if (this.bobber) {
+                    ctx.strokeStyle = '#333';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(130, 460);
+                    ctx.lineTo(this.bobber.x, this.bobber.y);
+                    ctx.stroke();
+                }
+                
+                // Fish underwater
+                this.fish.forEach(fish => {
+                    ctx.save();
+                    ctx.globalAlpha = 0.7;
+                    const color = fish.type === 'rare' ? '#FFD700' : '#FF6347';
+                    ctx.fillStyle = color;
+                    drawFish(fish.x, fish.y, fish.size);
+                    ctx.restore();
+                });
+                
+                // Chip in water
+                if (this.chipInWater) {
+                    drawDog(400, 450, '#F4A460');
+                    // Splash
+                    ctx.strokeStyle = '#FFF';
+                    ctx.lineWidth = 3;
+                    for (let i = 0; i < 6; i++) {
+                        const angle = (i / 6) * Math.PI * 2;
+                        ctx.beginPath();
+                        ctx.moveTo(400, 450);
+                        ctx.lineTo(400 + Math.cos(angle) * 30, 450 + Math.sin(angle) * 30);
+                        ctx.stroke();
+                    }
+                    drawText('CHIP FELL IN!', 400, 400, 24, '#FFD700');
+                }
+                
+                // Bobber
+                if (this.bobber) {
+                    const bobberY = this.biting ? this.bobber.y + Math.sin(Date.now() / 100) * 5 : this.bobber.y;
+                    drawCircle(this.bobber.x, bobberY, 8, '#FF0000');
+                    drawCircle(this.bobber.x, bobberY, 6, '#FFF');
+                    
+                    if (this.biting) {
+                        drawText('BITE! TAP NOW!', this.bobber.x, this.bobber.y - 30, 20, '#FFD700');
+                    }
+                }
+                
+                // Caught fish display
+                let displayX = 200;
+                this.caughtFish.forEach(fish => {
+                    ctx.save();
+                    ctx.globalAlpha = 0.5;
+                    const color = fish.type === 'rare' ? '#FFD700' : '#FF6347';
+                    ctx.fillStyle = color;
+                    drawFish(displayX, 560, fish.size * 0.7);
+                    displayX += 40;
+                    ctx.restore();
+                });
+                
+                // Instructions
+                if (!this.bobber) {
+                    drawText('Tap the pond to cast!', 400, 400, 22, 'white');
+                } else if (this.waiting) {
+                    drawText('Waiting for a bite...', 400, 270, 18, 'white');
+                }
+                
+                drawText(`Caught: ${this.caughtFish.length}`, 400, 580, 20, 'white');
+            },
+            
+            end() {
+                game.state = 'levelEnd';
+                game.highScores.pondBoss = Math.max(game.highScores.pondBoss || 0, this.score);
+                const rare = this.caughtFish.filter(f => f.type === 'rare').length;
+                showMessage(
+                    `<div class="menu-title">Pond Boss Complete!</div>
+                    <p>Fish Caught: ${this.caughtFish.length}</p>
+                    <p>Rare Fish: ${rare}</p>
+                    <p>Score: ${this.score}</p>
+                    <p>Best: ${game.highScores.pondBoss}</p>`,
+                    [
+                        { text: 'Play Again', action: () => { game.state = 'level5'; pondBoss.init(); hideMessage(); } },
+                        { text: 'Main Menu', action: () => { game.state = 'menu'; hideMessage(); } }
+                    ]
+                );
+            }
+        };
+
+        // ========== MENU SYSTEM ==========
+        function drawMenu() {
+            // Background
+            ctx.fillStyle = '#9ACD32';
+            ctx.fillRect(0, 0, 800, 600);
+            
+            // Sky
+            const gradient = ctx.createLinearGradient(0, 0, 0, 300);
+            gradient.addColorStop(0, '#87CEEB');
+            gradient.addColorStop(1, '#9ACD32');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, 800, 300);
+            
+            // Title
+            drawText('M6 RANCH', 400, 100, 64, '#FFD700');
+            drawText("Ryan's Wild Acre", 400, 150, 32, 'white');
+            
+            // Ryan
+            drawRyan(400, 250, 60);
+            
+            // Dogs
+            drawDog(300, 300, '#F4A460'); // Chip
+            drawDog(500, 300, '#000'); // Otis
+            
+            // Level buttons
+            const levels = [
+                { name: 'Cedar Fever', y: 350, state: 'level1', init: cedarFever },
+                { name: 'Hog Wild', y: 400, state: 'level2', init: hogWild },
+                { name: 'Spud Launcher', y: 450, state: 'level3', init: spudLauncher },
+                { name: 'Cluck Defense', y: 500, state: 'level4', init: cluckDefense },
+                { name: 'Pond Boss', y: 550, state: 'level5', init: pondBoss }
+            ];
+            
+            levels.forEach(level => {
+                const btnX = 250;
+                const btnY = level.y;
+                const btnW = 300;
+                const btnH = 40;
+                
+                drawButton(level.name, btnX, btnY, btnW, btnH);
+                
+                if (isClicked(btnX, btnY, btnW, btnH)) {
+                    game.state = level.state;
+                    game.score = 0;
+                    level.init.init();
+                }
+            });
+            
+            // Credits
+            drawText('Hico, TX | 70 Acres of Adventure', 400, 590, 14, 'white');
+        }
+
+        // ========== MAIN GAME LOOP ==========
+        let lastTime = Date.now();
+        
+        function gameLoop() {
+            const now = Date.now();
+            const dt = Math.min((now - lastTime) / 1000, 0.1);
+            lastTime = now;
+            
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // State machine
+            switch (game.state) {
+                case 'menu':
+                    ui.style.display = 'none';
+                    drawMenu();
+                    break;
+                    
+                case 'level1':
+                    ui.style.display = 'block';
+                    cedarFever.update(dt);
+                    cedarFever.draw();
+                    break;
+                    
+                case 'level2':
+                    ui.style.display = 'block';
+                    hogWild.update(dt);
+                    hogWild.draw();
+                    break;
+                    
+                case 'level3':
+                    ui.style.display = 'block';
+                    spudLauncher.update(dt);
+                    spudLauncher.draw();
+                    break;
+                    
+                case 'level4':
+                    ui.style.display = 'block';
+                    cluckDefense.update(dt);
+                    cluckDefense.draw();
+                    break;
+                    
+                case 'level5':
+                    ui.style.display = 'block';
+                    pondBoss.update(dt);
+                    pondBoss.draw();
+                    break;
+                    
+                case 'levelEnd':
+                    // Message is shown via showMessage()
+                    break;
+            }
+            
+            // Reset input flags
+            resetInput();
+            
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // Start the game
+        gameLoop();
+    </script>
+</body>
+</html>
