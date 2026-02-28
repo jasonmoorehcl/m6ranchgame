@@ -1,0 +1,898 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <title>Save the M6 Chickens</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+            touch-action: manipulation;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #2d5016 0%, #5a7c3e 100%);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow: hidden;
+            position: fixed;
+            width: 100%;
+        }
+
+        #gameContainer {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            max-width: 600px;
+            padding: 10px;
+        }
+
+        #gameCanvas {
+            background: #8b7355;
+            border: 4px solid #4a3425;
+            border-radius: 8px;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.4);
+            display: block;
+            width: 100%;
+            max-width: 600px;
+            height: auto;
+            touch-action: none;
+        }
+
+        #hud {
+            width: 100%;
+            max-width: 600px;
+            background: rgba(74, 52, 37, 0.9);
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: #fff;
+            font-size: 16px;
+            font-weight: bold;
+        }
+
+        #hud span {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        #controls {
+            margin-top: 15px;
+            display: grid;
+            grid-template-areas:
+                ". up ."
+                "left down right";
+            gap: 10px;
+            width: 200px;
+            height: 200px;
+        }
+
+        .control-btn {
+            width: 60px;
+            height: 60px;
+            background: rgba(255, 255, 255, 0.9);
+            border: 3px solid #4a3425;
+            border-radius: 12px;
+            font-size: 28px;
+            cursor: pointer;
+            user-select: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+            transition: all 0.1s;
+            touch-action: manipulation;
+        }
+
+        .control-btn:active {
+            transform: scale(0.95);
+            background: rgba(255, 255, 255, 0.7);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+
+        #btnUp { grid-area: up; }
+        #btnLeft { grid-area: left; }
+        #btnDown { grid-area: down; }
+        #btnRight { grid-area: right; }
+
+        #gameOverScreen, #startScreen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            color: white;
+            text-align: center;
+            padding: 20px;
+        }
+
+        #gameOverScreen.show, #startScreen.show {
+            display: flex;
+        }
+
+        h1 {
+            font-size: 42px;
+            margin-bottom: 20px;
+            text-shadow: 3px 3px 6px rgba(0,0,0,0.5);
+        }
+
+        h2 {
+            font-size: 32px;
+            margin-bottom: 15px;
+            color: #ffeb3b;
+        }
+
+        p {
+            font-size: 18px;
+            margin-bottom: 10px;
+            line-height: 1.6;
+        }
+
+        .btn {
+            background: #ffeb3b;
+            color: #333;
+            border: none;
+            padding: 15px 40px;
+            font-size: 20px;
+            font-weight: bold;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-top: 20px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+            touch-action: manipulation;
+        }
+
+        .btn:active {
+            transform: scale(0.95);
+        }
+
+        .instructions {
+            max-width: 400px;
+            background: rgba(74, 52, 37, 0.8);
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 15px;
+        }
+
+        @media (max-height: 700px) {
+            h1 { font-size: 32px; }
+            h2 { font-size: 24px; }
+            p { font-size: 16px; }
+            .btn { padding: 12px 30px; font-size: 18px; }
+        }
+    </style>
+</head>
+<body>
+
+<div id="startScreen" class="show">
+    <h1>🐔 Save the M6 Chickens! 🐔</h1>
+    <div class="instructions">
+        <h2>How to Play</h2>
+        <p>🐔 Get your chicken safely to the coop at the top!</p>
+        <p>🐕 Avoid Chip (tan) and Otis (black)</p>
+        <p>🦅 Watch out for hawks and coyotes</p>
+        <p>🍺 Collect Coors Light from Joe Lee for extra lives!</p>
+        <p><strong>Controls:</strong> Use arrow keys or on-screen buttons</p>
+        <p><strong>Swipe:</strong> Swipe in any direction to move</p>
+    </div>
+    <button class="btn" onclick="startGame()">START GAME</button>
+</div>
+
+<div id="gameContainer">
+    <div id="hud">
+        <span>❤️ Lives: <span id="lives">3</span></span>
+        <span>🏆 Score: <span id="score">0</span></span>
+        <span>📊 Level: <span id="level">1</span></span>
+    </div>
+    <canvas id="gameCanvas"></canvas>
+    <div id="controls">
+        <button class="control-btn" id="btnUp">▲</button>
+        <button class="control-btn" id="btnLeft">◄</button>
+        <button class="control-btn" id="btnDown">▼</button>
+        <button class="control-btn" id="btnRight">►</button>
+    </div>
+</div>
+
+<div id="gameOverScreen">
+    <h1>Game Over!</h1>
+    <h2 id="finalScore">Score: 0</h2>
+    <p>The M6 chickens need you!</p>
+    <button class="btn" onclick="restartGame()">PLAY AGAIN</button>
+</div>
+
+<script>
+// ============================================
+// GAME CONFIGURATION & CONSTANTS
+// ============================================
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+// Set canvas size (responsive)
+const GRID_SIZE = 10;
+const GRID_WIDTH = 10;
+const GRID_HEIGHT = 12;
+
+function resizeCanvas() {
+    const container = document.getElementById('gameContainer');
+    const maxWidth = Math.min(600, window.innerWidth - 40);
+    const cellSize = Math.floor(maxWidth / GRID_WIDTH);
+    
+    canvas.width = cellSize * GRID_WIDTH;
+    canvas.height = cellSize * GRID_HEIGHT;
+}
+
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+// Get cell size
+function getCellSize() {
+    return canvas.width / GRID_WIDTH;
+}
+
+// ============================================
+// GAME STATE
+// ============================================
+let gameState = {
+    running: false,
+    paused: false,
+    score: 0,
+    lives: 3,
+    level: 1,
+    highScore: parseInt(localStorage.getItem('m6ChickenHighScore')) || 0
+};
+
+// ============================================
+// PLAYER (CHICKEN)
+// ============================================
+const player = {
+    x: 5,
+    y: GRID_HEIGHT - 1,
+    size: 1,
+    color: '#FFFFFF',
+    reset() {
+        this.x = 5;
+        this.y = GRID_HEIGHT - 1;
+    },
+    move(dx, dy) {
+        const newX = this.x + dx;
+        const newY = this.y + dy;
+        
+        // Boundary check
+        if (newX >= 0 && newX < GRID_WIDTH && newY >= 0 && newY < GRID_HEIGHT) {
+            this.x = newX;
+            this.y = newY;
+            
+            // Check if reached the top
+            if (this.y === 0) {
+                levelComplete();
+            }
+            
+            // Award points for moving forward
+            if (dy < 0) {
+                gameState.score += 10;
+                updateHUD();
+            }
+        }
+    },
+    draw() {
+        const cellSize = getCellSize();
+        const centerX = this.x * cellSize + cellSize / 2;
+        const centerY = this.y * cellSize + cellSize / 2;
+        const size = cellSize * 0.7;
+        
+        // Chicken body (white)
+        ctx.fillStyle = '#FFFFFF';
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, size / 2.5, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Chicken head
+        ctx.beginPath();
+        ctx.arc(centerX, centerY - size / 4, size / 3.5, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Red comb
+        ctx.fillStyle = '#FF0000';
+        ctx.beginPath();
+        ctx.moveTo(centerX - size / 10, centerY - size / 2.5);
+        ctx.lineTo(centerX, centerY - size / 1.8);
+        ctx.lineTo(centerX + size / 10, centerY - size / 2.5);
+        ctx.fill();
+        
+        // Beak (yellow)
+        ctx.fillStyle = '#FFD700';
+        ctx.beginPath();
+        ctx.moveTo(centerX, centerY - size / 6);
+        ctx.lineTo(centerX + size / 5, centerY - size / 8);
+        ctx.lineTo(centerX, centerY - size / 10);
+        ctx.fill();
+        
+        // Eyes
+        ctx.fillStyle = '#000000';
+        ctx.beginPath();
+        ctx.arc(centerX - size / 8, centerY - size / 4, size / 15, 0, Math.PI * 2);
+        ctx.arc(centerX + size / 8, centerY - size / 4, size / 15, 0, Math.PI * 2);
+        ctx.fill();
+    }
+};
+
+// ============================================
+// OBSTACLES
+// ============================================
+class Obstacle {
+    constructor(type, lane, x, speed) {
+        this.type = type; // 'chip', 'otis', 'hawk', 'coyote'
+        this.lane = lane;
+        this.x = x;
+        this.speed = speed;
+        this.size = 1;
+    }
+    
+    update() {
+        this.x += this.speed;
+        
+        // Wrap around
+        if (this.speed > 0 && this.x > GRID_WIDTH + 2) {
+            this.x = -2;
+        } else if (this.speed < 0 && this.x < -2) {
+            this.x = GRID_WIDTH + 2;
+        }
+    }
+    
+    draw() {
+        const cellSize = getCellSize();
+        const centerX = this.x * cellSize + cellSize / 2;
+        const centerY = this.lane * cellSize + cellSize / 2;
+        const size = cellSize * 0.7;
+        
+        if (this.type === 'chip') {
+            // Tan French Bulldog
+            ctx.fillStyle = '#D2B48C';
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, size / 2.5, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Ears
+            ctx.fillStyle = '#C4A77D';
+            ctx.beginPath();
+            ctx.arc(centerX - size / 3.5, centerY - size / 3, size / 5, 0, Math.PI * 2);
+            ctx.arc(centerX + size / 3.5, centerY - size / 3, size / 5, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Snout
+            ctx.fillStyle = '#8B7355';
+            ctx.fillRect(centerX - size / 6, centerY, size / 3, size / 4);
+            
+            // Eyes
+            ctx.fillStyle = '#000000';
+            ctx.beginPath();
+            ctx.arc(centerX - size / 6, centerY - size / 8, size / 12, 0, Math.PI * 2);
+            ctx.arc(centerX + size / 6, centerY - size / 8, size / 12, 0, Math.PI * 2);
+            ctx.fill();
+            
+        } else if (this.type === 'otis') {
+            // Black French Bulldog
+            ctx.fillStyle = '#2C2C2C';
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, size / 2.5, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Ears
+            ctx.fillStyle = '#1A1A1A';
+            ctx.beginPath();
+            ctx.arc(centerX - size / 3.5, centerY - size / 3, size / 5, 0, Math.PI * 2);
+            ctx.arc(centerX + size / 3.5, centerY - size / 3, size / 5, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Snout
+            ctx.fillStyle = '#404040';
+            ctx.fillRect(centerX - size / 6, centerY, size / 3, size / 4);
+            
+            // Eyes
+            ctx.fillStyle = '#FFFFFF';
+            ctx.beginPath();
+            ctx.arc(centerX - size / 6, centerY - size / 8, size / 12, 0, Math.PI * 2);
+            ctx.arc(centerX + size / 6, centerY - size / 8, size / 12, 0, Math.PI * 2);
+            ctx.fill();
+            
+        } else if (this.type === 'hawk') {
+            // Hawk (flying)
+            ctx.fillStyle = '#8B4513';
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, size / 3, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Wings
+            ctx.fillStyle = '#654321';
+            ctx.beginPath();
+            ctx.moveTo(centerX - size / 1.5, centerY);
+            ctx.lineTo(centerX - size / 4, centerY - size / 6);
+            ctx.lineTo(centerX - size / 4, centerY + size / 6);
+            ctx.fill();
+            
+            ctx.beginPath();
+            ctx.moveTo(centerX + size / 1.5, centerY);
+            ctx.lineTo(centerX + size / 4, centerY - size / 6);
+            ctx.lineTo(centerX + size / 4, centerY + size / 6);
+            ctx.fill();
+            
+            // Beak
+            ctx.fillStyle = '#FFD700';
+            ctx.beginPath();
+            ctx.moveTo(centerX, centerY);
+            ctx.lineTo(centerX + size / 4, centerY);
+            ctx.lineTo(centerX + size / 8, centerY + size / 8);
+            ctx.fill();
+            
+        } else if (this.type === 'coyote') {
+            // Coyote
+            ctx.fillStyle = '#A0826D';
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, size / 2.5, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Head
+            ctx.beginPath();
+            ctx.arc(centerX + size / 4, centerY - size / 6, size / 3.5, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Ears
+            ctx.fillStyle = '#8B6F47';
+            ctx.beginPath();
+            ctx.moveTo(centerX + size / 6, centerY - size / 2.5);
+            ctx.lineTo(centerX + size / 4, centerY - size / 3);
+            ctx.lineTo(centerX + size / 3, centerY - size / 2.5);
+            ctx.fill();
+            
+            // Snout
+            ctx.fillStyle = '#6B5537';
+            ctx.beginPath();
+            ctx.arc(centerX + size / 2, centerY - size / 8, size / 5, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Eyes
+            ctx.fillStyle = '#FFD700';
+            ctx.beginPath();
+            ctx.arc(centerX + size / 5, centerY - size / 4, size / 15, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+    
+    checkCollision() {
+        const distance = Math.sqrt(
+            Math.pow(this.x - player.x, 2) + 
+            Math.pow(this.lane - player.y, 2)
+        );
+        return distance < 0.8;
+    }
+}
+
+// ============================================
+// POWER-UPS (COORS LIGHT)
+// ============================================
+class PowerUp {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.collected = false;
+        this.bobTime = 0;
+    }
+    
+    update() {
+        this.bobTime += 0.1;
+    }
+    
+    draw() {
+        if (this.collected) return;
+        
+        const cellSize = getCellSize();
+        const centerX = this.x * cellSize + cellSize / 2;
+        const centerY = this.y * cellSize + cellSize / 2 + Math.sin(this.bobTime) * 3;
+        const size = cellSize * 0.6;
+        
+        // Beer can (Coors Light silver/blue)
+        ctx.fillStyle = '#C0C0C0';
+        ctx.fillRect(centerX - size / 4, centerY - size / 2, size / 2, size);
+        
+        // Blue stripe
+        ctx.fillStyle = '#0066CC';
+        ctx.fillRect(centerX - size / 4, centerY - size / 6, size / 2, size / 3);
+        
+        // Shine effect
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(centerX - size / 5, centerY - size / 2.5, size / 10, size / 3);
+        
+        // Label text
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = `${size / 4}px Arial`;
+        ctx.textAlign = 'center';
+        ctx.fillText('🍺', centerX, centerY);
+    }
+    
+    checkCollision() {
+        return !this.collected && this.x === player.x && this.y === player.y;
+    }
+}
+
+// ============================================
+// GAME OBJECTS MANAGEMENT
+// ============================================
+let obstacles = [];
+let powerUps = [];
+
+function spawnObstacles() {
+    obstacles = [];
+    
+    const levelSpeed = 0.02 + (gameState.level - 1) * 0.01;
+    
+    // Lane 1: Chip (left to right)
+    for (let i = 0; i < 2 + gameState.level; i++) {
+        obstacles.push(new Obstacle('chip', 2, i * 3, levelSpeed * 1.2));
+    }
+    
+    // Lane 2: Otis (right to left)
+    for (let i = 0; i < 2 + gameState.level; i++) {
+        obstacles.push(new Obstacle('otis', 3, GRID_WIDTH - i * 3.5, -levelSpeed * 1.5));
+    }
+    
+    // Lane 4: Chip again (left to right, faster)
+    for (let i = 0; i < 1 + Math.floor(gameState.level / 2); i++) {
+        obstacles.push(new Obstacle('chip', 5, i * 4, levelSpeed * 1.8));
+    }
+    
+    // Lane 6: Hawks (right to left)
+    for (let i = 0; i < 1 + Math.floor(gameState.level / 2); i++) {
+        obstacles.push(new Obstacle('hawk', 7, GRID_WIDTH - i * 5, -levelSpeed * 2));
+    }
+    
+    // Lane 8: Coyotes (left to right)
+    for (let i = 0; i < 1 + Math.floor(gameState.level / 3); i++) {
+        obstacles.push(new Obstacle('coyote', 9, i * 6, levelSpeed * 2.2));
+    }
+    
+    // Lane 10: Otis fast lane (right to left)
+    for (let i = 0; i < 1 + Math.floor(gameState.level / 2); i++) {
+        obstacles.push(new Obstacle('otis', 10, GRID_WIDTH - i * 4, -levelSpeed * 2.5));
+    }
+}
+
+function spawnPowerUp() {
+    const safeLanes = [1, 4, 6, 8];
+    const randomLane = safeLanes[Math.floor(Math.random() * safeLanes.length)];
+    const randomX = Math.floor(Math.random() * GRID_WIDTH);
+    powerUps.push(new PowerUp(randomX, randomLane));
+}
+
+// ============================================
+// GAME LOGIC
+// ============================================
+function levelComplete() {
+    gameState.level++;
+    gameState.score += 100 * gameState.level;
+    player.reset();
+    spawnObstacles();
+    
+    // Chance to spawn power-up on new level
+    if (Math.random() < 0.4) {
+        spawnPowerUp();
+    }
+    
+    updateHUD();
+}
+
+function loseLife() {
+    gameState.lives--;
+    updateHUD();
+    
+    if (gameState.lives <= 0) {
+        gameOver();
+    } else {
+        player.reset();
+        // Brief invincibility would go here in a more complex version
+    }
+}
+
+function collectPowerUp(powerUp) {
+    powerUp.collected = true;
+    gameState.lives++;
+    gameState.score += 50;
+    updateHUD();
+}
+
+function gameOver() {
+    gameState.running = false;
+    
+    if (gameState.score > gameState.highScore) {
+        gameState.highScore = gameState.score;
+        localStorage.setItem('m6ChickenHighScore', gameState.highScore);
+    }
+    
+    document.getElementById('finalScore').textContent = `Score: ${gameState.score}`;
+    document.getElementById('gameOverScreen').classList.add('show');
+}
+
+function updateHUD() {
+    document.getElementById('lives').textContent = gameState.lives;
+    document.getElementById('score').textContent = gameState.score;
+    document.getElementById('level').textContent = gameState.level;
+}
+
+// ============================================
+// RENDERING
+// ============================================
+function drawBackground() {
+    const cellSize = getCellSize();
+    
+    // Draw grid
+    for (let y = 0; y < GRID_HEIGHT; y++) {
+        // Alternate row colors
+        if (y === 0) {
+            // Top row - chicken coop (goal)
+            ctx.fillStyle = '#654321';
+        } else if (y === GRID_HEIGHT - 1) {
+            // Bottom row - starting area
+            ctx.fillStyle = '#5a7c3e';
+        } else if (y % 2 === 0) {
+            // Road lanes
+            ctx.fillStyle = '#666666';
+        } else {
+            // Safe zones
+            ctx.fillStyle = '#7c9c5a';
+        }
+        
+        ctx.fillRect(0, y * cellSize, canvas.width, cellSize);
+        
+        // Draw grid lines
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(0, y * cellSize, canvas.width, cellSize);
+    }
+    
+    // Draw goal zone text
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = `${cellSize / 2}px Arial`;
+    ctx.textAlign = 'center';
+    ctx.fillText('🏠 M6 COOP 🏠', canvas.width / 2, cellSize * 0.6);
+    
+    // Draw start zone text
+    ctx.fillText('START', canvas.width / 2, canvas.height - cellSize * 0.4);
+}
+
+function render() {
+    // Clear canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // Draw background
+    drawBackground();
+    
+    // Draw power-ups
+    powerUps.forEach(powerUp => powerUp.draw());
+    
+    // Draw obstacles
+    obstacles.forEach(obstacle => obstacle.draw());
+    
+    // Draw player
+    player.draw();
+}
+
+// ============================================
+// GAME LOOP
+// ============================================
+let lastTime = 0;
+
+function gameLoop(timestamp) {
+    if (!gameState.running) return;
+    
+    const deltaTime = timestamp - lastTime;
+    lastTime = timestamp;
+    
+    // Update obstacles
+    obstacles.forEach(obstacle => {
+        obstacle.update();
+        if (obstacle.checkCollision()) {
+            loseLife();
+        }
+    });
+    
+    // Update and check power-ups
+    powerUps.forEach(powerUp => {
+        powerUp.update();
+        if (powerUp.checkCollision()) {
+            collectPowerUp(powerUp);
+        }
+    });
+    
+    // Remove collected power-ups
+    powerUps = powerUps.filter(p => !p.collected);
+    
+    // Render
+    render();
+    
+    // Continue loop
+    requestAnimationFrame(gameLoop);
+}
+
+// ============================================
+// INPUT HANDLING
+// ============================================
+
+// Keyboard controls
+document.addEventListener('keydown', (e) => {
+    if (!gameState.running) return;
+    
+    switch(e.key) {
+        case 'ArrowUp':
+        case 'w':
+        case 'W':
+            e.preventDefault();
+            player.move(0, -1);
+            break;
+        case 'ArrowDown':
+        case 's':
+        case 'S':
+            e.preventDefault();
+            player.move(0, 1);
+            break;
+        case 'ArrowLeft':
+        case 'a':
+        case 'A':
+            e.preventDefault();
+            player.move(-1, 0);
+            break;
+        case 'ArrowRight':
+        case 'd':
+        case 'D':
+            e.preventDefault();
+            player.move(1, 0);
+            break;
+    }
+});
+
+// On-screen button controls
+function setupButtonControls() {
+    const btnUp = document.getElementById('btnUp');
+    const btnDown = document.getElementById('btnDown');
+    const btnLeft = document.getElementById('btnLeft');
+    const btnRight = document.getElementById('btnRight');
+    
+    // Prevent default touch behavior
+    [btnUp, btnDown, btnLeft, btnRight].forEach(btn => {
+        btn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+        }, { passive: false });
+    });
+    
+    // Add both click and touchstart handlers for maximum compatibility
+    function addMoveHandler(btn, dx, dy) {
+        const handler = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (gameState.running) {
+                player.move(dx, dy);
+            }
+        };
+        
+        btn.addEventListener('click', handler);
+        btn.addEventListener('touchstart', handler, { passive: false });
+    }
+    
+    addMoveHandler(btnUp, 0, -1);
+    addMoveHandler(btnDown, 0, 1);
+    addMoveHandler(btnLeft, -1, 0);
+    addMoveHandler(btnRight, 1, 0);
+}
+
+// Swipe controls
+let touchStartX = 0;
+let touchStartY = 0;
+let touchEndX = 0;
+let touchEndY = 0;
+
+canvas.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    touchStartX = e.changedTouches[0].screenX;
+    touchStartY = e.changedTouches[0].screenY;
+}, { passive: false });
+
+canvas.addEventListener('touchend', (e) => {
+    e.preventDefault();
+    if (!gameState.running) return;
+    
+    touchEndX = e.changedTouches[0].screenX;
+    touchEndY = e.changedTouches[0].screenY;
+    handleSwipe();
+}, { passive: false });
+
+function handleSwipe() {
+    const deltaX = touchEndX - touchStartX;
+    const deltaY = touchEndY - touchStartY;
+    const minSwipeDistance = 30;
+    
+    if (Math.abs(deltaX) > Math.abs(deltaY)) {
+        // Horizontal swipe
+        if (Math.abs(deltaX) > minSwipeDistance) {
+            if (deltaX > 0) {
+                player.move(1, 0); // Right
+            } else {
+                player.move(-1, 0); // Left
+            }
+        }
+    } else {
+        // Vertical swipe
+        if (Math.abs(deltaY) > minSwipeDistance) {
+            if (deltaY > 0) {
+                player.move(0, 1); // Down
+            } else {
+                player.move(0, -1); // Up
+            }
+        }
+    }
+}
+
+// ============================================
+// GAME START/RESTART
+// ============================================
+function startGame() {
+    document.getElementById('startScreen').classList.remove('show');
+    
+    // Reset game state
+    gameState.running = true;
+    gameState.score = 0;
+    gameState.lives = 3;
+    gameState.level = 1;
+    
+    // Reset player
+    player.reset();
+    
+    // Spawn initial obstacles and power-ups
+    spawnObstacles();
+    if (Math.random() < 0.5) {
+        spawnPowerUp();
+    }
+    
+    // Update HUD
+    updateHUD();
+    
+    // Start game loop
+    lastTime = performance.now();
+    requestAnimationFrame(gameLoop);
+}
+
+function restartGame() {
+    document.getElementById('gameOverScreen').classList.remove('show');
+    powerUps = [];
+    startGame();
+}
+
+// ============================================
+// INITIALIZATION
+// ============================================
+setupButtonControls();
+console.log('Save the M6 Chickens - Game Loaded Successfully!');
+console.log('Touch controls initialized for mobile browsers');
+console.log('Use arrow keys, on-screen buttons, or swipe gestures to play');
+</script>
+
+</body>
+</html>
